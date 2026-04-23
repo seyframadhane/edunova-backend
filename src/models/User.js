@@ -1,0 +1,25 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+const userSchema = new mongoose.Schema({
+  firstName: { type: String, required: true, trim: true },
+  lastName:  { type: String, required: true, trim: true },
+  email:     { type: String, required: true, unique: true, lowercase: true, index: true },
+  password:  { type: String, required: true, minlength: 6, select: false },
+  avatar:    { type: String },
+  role:      { type: String, enum: ['user', 'instructor', 'admin'], default: 'user' },
+  points:    { type: Number, default: 0 },
+  isActive:  { type: Boolean, default: true },
+}, { timestamps: true });
+
+// Mongoose 9: async pre-hook, no `next` parameter
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+  this.password = await bcrypt.hash(this.password, 10);
+});
+
+userSchema.methods.comparePassword = function (raw) {
+  return bcrypt.compare(raw, this.password);
+};
+
+module.exports = mongoose.model('User', userSchema);
