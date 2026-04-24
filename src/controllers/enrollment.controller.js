@@ -1,5 +1,6 @@
 const Enrollment = require('../models/Enrollment');
 const Certificate = require('../models/Certificate');
+const Course = require('../models/Course');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const crypto = require('crypto');
@@ -11,11 +12,23 @@ exports.myEnrollments = asyncHandler(async (req, res) => {
 
 exports.enroll = asyncHandler(async (req, res) => {
   const { courseId } = req.body;
+  if (!courseId) throw new ApiError(400, 'courseId is required');
+
+  // Upsert so users can't double-enroll; only count the first-time insert.
+  const existing = await Enrollment.findOne({ user: req.user.sub, course: courseId });
   const enrollment = await Enrollment.findOneAndUpdate(
     { user: req.user.sub, course: courseId },
     { $setOnInsert: { user: req.user.sub, course: courseId } },
     { upsert: true, new: true }
   );
+
+  // Only bump counters on the first enrollment
+  if (!existing) {
+    await Course.findByIdAndUpdate(courseId, {
+      $inc: { enrolledCount: 1, studentsCount: 1 },
+    });
+  }
+
   res.status(201).json({ success: true, data: enrollment });
 });
 

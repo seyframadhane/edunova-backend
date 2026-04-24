@@ -10,9 +10,19 @@ const userSchema = new mongoose.Schema({
   role:      { type: String, enum: ['user', 'instructor', 'admin'], default: 'user' },
   points:    { type: Number, default: 0 },
   isActive:  { type: Boolean, default: true },
+
+  // ── Onboarding fields ──
+  careerGoal: {
+    type: String,
+    enum: ['Enter in new industry', 'Hobby', 'Advance in your field', 'Self Improvement', null],
+    default: null,
+  },
+  interests: { type: [String], default: [], index: true },
+  city:      { type: String, default: '' },
+  country:   { type: String, default: '' },
+  onboardingCompleted: { type: Boolean, default: false, index: true },
 }, { timestamps: true });
 
-// Mongoose 9: async pre-hook, no `next` parameter
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 10);
