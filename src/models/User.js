@@ -11,16 +11,15 @@ const userSchema = new mongoose.Schema({
   points:    { type: Number, default: 0 },
   isActive:  { type: Boolean, default: true },
 
-  // ── Onboarding fields ──
   careerGoal: {
     type: String,
     enum: ['Enter in new industry', 'Hobby', 'Advance in your field', 'Self Improvement', null],
     default: null,
   },
-  interests: { type: [String], default: [], index: true },
+  interests: { type: [String], default: [] },
   city:      { type: String, default: '' },
   country:   { type: String, default: '' },
-  onboardingCompleted: { type: Boolean, default: false, index: true },
+  onboardingCompleted: { type: Boolean, default: false },
 }, { timestamps: true });
 
 userSchema.pre('save', async function () {
