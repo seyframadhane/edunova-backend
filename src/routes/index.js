@@ -15,5 +15,6 @@ router.use('/contact',       require('./contact.routes'));
 router.use('/testimonials',  require('./testimonial.routes'));
 router.use("/admin", require("./admin.routes"));
 router.use("/chat", require("./chat.routes"));
+router.use('/ai', require('./ai.routes'));
 
 module.exports = router;
