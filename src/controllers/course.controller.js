@@ -3,6 +3,8 @@ const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const Module = require('../models/Module');
+const Lesson = require('../models/Lesson');
 
 // ─── Helper: map UI sort key → Mongo sort object ────────────────────────
 const SORT_MAP = {
@@ -191,4 +193,31 @@ exports.recommended = asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: items, meta: { total: items.length } });
+});
+
+exports.detail = asyncHandler(async (req, res) => {
+  const course = await Course.findById(req.params.id).populate('instructor').lean();
+  if (!course) throw new ApiError(404, 'Course not found');
+
+  const modules = await Module.find({ course: course._id }).sort('order').lean();
+  const lessons = await Lesson.find({ module: { $in: modules.map((m) => m._id) } })
+    .sort('order')
+    .lean();
+
+  course.modules = modules.map((m) => {
+    const list = lessons.filter((l) => String(l.module) === String(m._id));
+    return {
+      ...m,
+      lessons: list,
+      lessonsCount: list.length,
+      durationMinutes: list.reduce((s, l) => s + (l.durationMinutes || 0), 0),
+    };
+  });
+
+  if (req.user?.sub) {
+    const enrolled = await Enrollment.exists({ user: req.user.sub, course: course._id });
+    course.isEnrolled = !!enrolled;
+  }
+
+  res.json({ success: true, data: course });
 });
