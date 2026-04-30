@@ -18,7 +18,7 @@ exports.chat = asyncHandler(async (req, res) => {
 exports.summary = asyncHandler(async (req, res) => {
   const { courseId } = req.body;
   if (!courseId) throw new ApiError(400, 'courseId is required');
-  const summary = await aiService.summary({ courseId });
+  const summary = await aiService.summarize({ courseId });
   res.json({ success: true, data: { summary } });
 });
 
