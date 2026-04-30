@@ -112,6 +112,109 @@ async function generate(prompt, opts = {}) {
   throw new Error('No AI provider available right now (rate limited or no key)');
 }
 
+async function* generateStreamWithGroq(prompt, { temperature = 0.7, maxTokens = 2500 } = {}) {
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not set');
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature,
+      max_tokens: maxTokens,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Groq ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (line.trim() === 'data: [DONE]') return;
+      if (line.startsWith('data: ')) {
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) yield content;
+        } catch (e) { /* ignore */ }
+      }
+    }
+  }
+}
+
+async function* generateStreamWithGemini(prompt, { temperature = 0.7, maxTokens = 2500 } = {}) {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature, maxOutputTokens: maxTokens },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (content) yield content;
+        } catch (e) { /* ignore */ }
+      }
+    }
+  }
+}
+
+async function* generateStream(prompt, opts = {}) {
+  if (GROQ_API_KEY) {
+    try {
+      yield* await generateStreamWithGroq(prompt, opts);
+      return;
+    } catch (err) {
+      console.warn('[ai.service] Groq stream failed:', err.message);
+    }
+  }
+
+  if (GEMINI_API_KEY) {
+    try {
+      yield* await generateStreamWithGemini(prompt, opts);
+      return;
+    } catch (err) {
+      console.warn('[ai.service] Gemini stream failed:', err.message);
+    }
+  }
+
+  throw new Error('No AI provider available right now (rate limited or no key)');
+}
+
 /* ============================================================
    Course context
    ============================================================ */
@@ -256,6 +359,27 @@ exports.chat = async ({ courseId, messages = [] }) => {
   } catch (err) {
     console.error('[ai.service.chat] error:', err.message);
     return "I'm temporarily rate-limited. Please try again in a minute.";
+  }
+};
+
+exports.chatStream = async function* ({ courseId, messages = [] }) {
+  const ctx = await getCourseContext(courseId);
+  const courseInfo = ctx
+    ? `You are a helpful AI tutor for "${ctx.title}" (${ctx.level}). Topics: ${ctx.topics.join(', ') || 'general'}. Description: ${(ctx.description || '').slice(0, 300)}`
+    : 'You are a helpful AI tutor.';
+
+  const history = messages
+    .slice(-8)
+    .map((m) => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.content}`)
+    .join('\n');
+
+  const prompt = `${courseInfo}\n\nKeep replies clear and concise (under 200 words).\n\n${history}\n\nTutor:`;
+
+  try {
+    yield* await generateStream(prompt, { temperature: 0.7, maxTokens: 800 });
+  } catch (err) {
+    console.error('[ai.service.chatStream] error:', err.message);
+    yield "I'm temporarily rate-limited. Please try again in a minute.";
   }
 };
 
