@@ -15,6 +15,36 @@ exports.chat = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { reply } });
 });
 
+exports.chatStream = asyncHandler(async (req, res) => {
+  const { courseId, history = [], message } = req.body;
+  if (!courseId || !message) {
+    return res.status(400).json({ success: false, message: 'courseId and message are required' });
+  }
+
+  const safeHistory = Array.isArray(history)
+    ? history.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    : [];
+
+  const messages = [...safeHistory, { role: 'user', content: String(message) }];
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    const stream = aiService.chatStream({ courseId, messages });
+    for await (const chunk of stream) {
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+    }
+  } catch (err) {
+    console.error('[chatStream error]', err);
+    res.write(`data: ${JSON.stringify({ text: "\n\n[Error: Stream interrupted]" })}\n\n`);
+  } finally {
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+});
+
 exports.summary = asyncHandler(async (req, res) => {
   const { courseId } = req.body;
   if (!courseId) throw new ApiError(400, 'courseId is required');

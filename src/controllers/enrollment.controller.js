@@ -45,11 +45,6 @@ exports.updateProgress = asyncHandler(async (req, res) => {
   if (enrollment.progress >= 100 && enrollment.status !== 'completed') {
     enrollment.status = 'completed';
     enrollment.completedAt = new Date();
-    await Certificate.create({
-      user: enrollment.user,
-      course: enrollment.course,
-      code: 'EDU-' + crypto.randomBytes(6).toString('hex').toUpperCase(),
-    });
   }
 
   await enrollment.save();

@@ -5,6 +5,7 @@ const { verifyToken } = require('../middleware/auth.middleware');
 router.use(verifyToken);
 
 router.post('/chat',         ctrl.chat);
+router.post('/chat/stream',  ctrl.chatStream);
 router.post('/summary',      ctrl.summary);
 router.post('/quiz',         ctrl.quiz);
 router.post('/emotion',      ctrl.logEmotion);
